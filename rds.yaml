@@ -1,0 +1,168 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'creating the RDS aurora mysql serverless cluster, Iam role, securitygroup, secret and subnetgroup'
+Parameters:
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Default: ''
+  AllowedIpRange:
+    Type: String
+    Description: Enter the VPC IPv4 CIDR to be added in SG
+    Default: ''
+  Subnets:
+    Type: 'List<AWS::EC2::Subnet::Id>'
+    Default: ''
+  RDSClusterName:
+    Type: String
+    Description: The identifier for the Aurora DB cluster
+    Default: ''
+  RDSMasterUsername:
+    Type: String
+    Description: The master username for the Aurora DB cluster
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    Default: ''
+  RDSMasterUserPassword:
+    Type: String
+    NoEcho: 'true'
+    Description: The master password for the Aurora DB cluster
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+  RDSBackupRetentionDays:
+    Type: Number
+    Description: The number of days to retain RDS backups
+    MinValue: 1
+    MaxValue: 35
+    Default: '7'
+  RDSPreferredBackupWindow:
+    Type: String
+    Default: ''  
+    Description: 'Set the backup Timing eg:"05:00-06:00"'
+  RDSMinCapacity:
+    Type: String
+    Default: 2
+  RDSMaxCapacity:
+    Type: String
+    Default: 10
+  RDSAvailabilityZones:
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+    Description: Select the Availability Zones for the Aurora DB cluster
+    Default: ''
+  MonitoringInterval:
+    Type: String
+    Description: The interval, in seconds, between points when Enhanced Monitoring metrics are collected for the DB instance
+    AllowedValues: ["1", "5", "10", "15", "30", "60"]
+    Default: '1'
+Resources:
+  RDSEnhancedMonitoringRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub "${RDSClusterName}-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: monitoring.rds.amazonaws.com
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+  AuroraClusterSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Sub "${RDSClusterName}-sg"
+      GroupDescription: Aurora Cluster Security Group
+      SecurityGroupIngress:
+        - CidrIp: !Ref AllowedIpRange
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+      VpcId: !Ref VPC
+  RDSDBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupName: !Sub "${RDSClusterName}-subgroup"
+      DBSubnetGroupDescription: rds subnet goup for parallel cluster
+      SubnetIds: !Ref Subnets
+  AuroraCluster:
+    Type: 'AWS::RDS::DBCluster'
+    Properties:
+      Engine: aurora-mysql
+      DBClusterIdentifier: !Ref RDSClusterName
+      MasterUsername: !Ref RDSMasterUsername
+      MasterUserPassword: !Ref RDSMasterUserPassword
+      EngineVersion: 8.0.mysql_aurora.3.07.1
+      DBSubnetGroupName: !Ref RDSDBSubnetGroup
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: !Ref RDSMinCapacity
+        MaxCapacity: !Ref RDSMaxCapacity
+      AvailabilityZones: !Ref RDSAvailabilityZones
+      VpcSecurityGroupIds:
+        - !Ref AuroraClusterSecurityGroup
+      StorageEncrypted: true
+      BackupRetentionPeriod: !Ref RDSBackupRetentionDays
+      PreferredBackupWindow: !Ref RDSPreferredBackupWindow
+      CopyTagsToSnapshot: true
+      DeletionProtection: true
+      AutoMinorVersionUpgrade: false
+  AuroraClusterInstanceReader:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      Engine: aurora-mysql
+      DBInstanceClass: db.serverless
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceIdentifier: !Sub "${RDSClusterName}-Reader"
+      DBSubnetGroupName: !Ref RDSDBSubnetGroup
+      AvailabilityZone: !Select 
+        - '0'
+        - !Ref RDSAvailabilityZones
+      MonitoringInterval: !Ref MonitoringInterval
+      MonitoringRoleArn: !GetAtt RDSEnhancedMonitoringRole.Arn
+      CopyTagsToSnapshot: true
+      PubliclyAccessible: false
+      AutoMinorVersionUpgrade: false
+  AuroraClusterInstanceWriter:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      Engine: aurora-mysql
+      DBInstanceClass: db.serverless
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceIdentifier: !Sub "${RDSClusterName}-writer"
+      DBSubnetGroupName: !Ref RDSDBSubnetGroup
+      AvailabilityZone: !Select 
+        - '1'
+        - !Ref RDSAvailabilityZones
+      MonitoringInterval: !Ref MonitoringInterval
+      MonitoringRoleArn: !GetAtt RDSEnhancedMonitoringRole.Arn
+      CopyTagsToSnapshot: true
+      PubliclyAccessible: false
+      AutoMinorVersionUpgrade: false
+  Secret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Sub "${RDSClusterName}-rdssecret"
+      Description: Secret for the RDS database
+      SecretString: !Ref RDSMasterUserPassword
+Outputs:
+  RDSinstanceHostNameReader:
+    Description: The hostname of the RDS instance
+    Value: !GetAtt AuroraClusterInstanceReader.Endpoint.Address
+  RDSinstanceHostNameWriter:
+    Description: The hostname of the RDS instance
+    Value: !GetAtt AuroraClusterInstanceWriter.Endpoint.Address
+  RDSinstancePort:
+    Description: The port of the RDS instance
+    Value: !GetAtt AuroraClusterInstanceReader.Endpoint.Port
+  RDSHostName:
+    Description: The hostname of the Aurora DB cluster
+    Value: !GetAtt AuroraCluster.Endpoint.Address
+  AuroraClusterSGId:
+    Description: AuroraCluster Security Group ID
+    Value: !GetAtt AuroraClusterSecurityGroup.GroupId
+  SecretARN:
+    Description: The ARN of the database secret
+    Value: !Ref Secret
+  UserName:
+    Description: The user name of the database
+    Value: !Ref RDSMasterUsername

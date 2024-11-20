@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the Bucket
+    Deafult: 'UE2-S3001-HPC-NP'
+
+Resources:
+  SecureS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'AES256'
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SecureS3Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyPublicRead
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:GetObject
+              - s3:GetObjectAcl
+              - s3:GetObjectVersion
+              - s3:GetObjectVersionAcl
+            Resource: !Sub "${SecureS3Bucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+Outputs:
+  SecureS3BucketName:
+    Description: "The name of the secure S3 bucket"
+    Value: !Ref SecureS3Bucket

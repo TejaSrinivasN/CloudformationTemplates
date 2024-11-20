@@ -1,0 +1,530 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template creates Amazon FSx for NetApp ONTAP file system into private subnets in separate Availability Zones  
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Network configuration
+        Parameters:
+          - myVpc
+          - SubnetIds
+      - Label:
+          default: Configurations for FSx ONTAP File System
+        Parameters:
+          - FileSystemName
+          - ThroughputCapacity
+          - FSxAllowedCIDR
+          - WeeklyMaintenanceTime
+          - FsxAdminPassword
+          - DailyAutomaticBackupStartTime
+          - AutomaticBackupRetentionDays
+      - Label:
+          default: Storage Virtual Machine configurations
+        Parameters:
+          - StorageCapacity
+          - RootVolumeSecurityStyle
+          - SvmAdminPassword
+          - StorageVirtualMachineName
+      - Label:
+          default: AWS-Active Directory
+        Parameters:
+          - NetBiosName
+          - ADDirectoryId
+          - ADDirectoryName
+          - ADDnsIpAddresses1
+          - ADDnsIpAddresses2
+          - OrganizationalUnitDistinguishedName
+          - UserName
+          - Password
+      - Label:
+          default: App Volume
+        Parameters:
+          - AppFsxVolumeName
+          - AppVolumesize
+          - AppVolumeSecurityStyle
+          - AppJunctionPath
+          - AppVolumetype
+          - AppStorageEfficiency
+          - AppSnapshotPolicy
+          - AppTieringPolicyCoolingPeriod
+          - AppTieringPolicyName
+      - Label:
+          default: Data Volume
+        Parameters:
+          - DataFsxVolumeName
+          - DataVolumesize
+          - DatatVolumeSecurityStyle
+          - DataStorageEfficiency
+          - DataJunctionPath
+          - DataVolumetype
+          - DataSnapshotPolicy
+          - DataTieringPolicyCoolingPeriod
+          - DataTieringPolicyName
+      # - Label:
+      #     default: Scratch Volume
+      #   Parameters:
+      #     - ScratchFsxVolumeName
+      #     - ScratchVolumesize
+      #     - ScratchtVolumeSecurityStyle
+      #     - ScratchStorageEfficiency
+      #     - ScratchJunctionPath
+      #     - ScratchVolumetype
+      #     - ScratchSnapshotPolicy
+      #     - ScratchTieringPolicyCoolingPeriod
+      #     - ScratchTieringPolicyName
+Parameters:
+  FileSystemName:
+    Description: Specify a name for your file system to make it easier to find and manage.
+    Type: String
+    Default: ''
+  myVpc:
+    Description: Choose the VPC to which you want to deploy the FSxONTAP cluster
+    Type: AWS::EC2::VPC::Id
+
+  SubnetIds:
+    Description: Choose the first Subnet where FSxONTAP file system's network interface will be created
+    Type: AWS::EC2::Subnet::Id
+
+  StorageCapacity:
+    Type: Number
+    Default: 1024
+    Description: The storage capacity of the file system (GiB).
+    # AllowedValues: [5120, 10240, 15360, 20480]
+
+  ThroughputCapacity:
+    Type: Number
+    Description: Sets the throughput capacity for the file system that you're creating. Valid values are 512, 1024, and 2048 MBps.
+    ConstraintDescription: Valid values are 512, 1024, and 2048 MBps.
+    AllowedValues: [128,256,512, 1024, 2048]
+    Default: 256
+
+  FsxAdminPassword:
+     NoEcho: true
+     Description: Password for this file system's “fsxadmin“ user, which you can use to access the ONTAP CLI or REST API.
+     Type: String
+     MinLength: 5
+     MaxLength: 40
+     AllowedPattern: ^[a-zA-Z0-9]*$
+  RootVolumeSecurityStyle:
+     Description: The security style of the root volume of the SVM. Specify one of the following values, UNIX, NTFS or MIXED.
+     Type: String
+     Default: UNIX
+     AllowedValues: ["UNIX", "NTFS", "MIXED"]
+  FSxAllowedCIDR:
+    Description: CIDR range allowed to connect to Amazon FSx file system.
+    Type: String
+    Default: '10.74.0.0/22'
+  DailyAutomaticBackupStartTime:
+     Description: A recurring daily time, in the format HH:MM. HH is the zero-padded hour of the day (0-23), and MM is the zero-padded minute of the hour. For example, 05:00 specifies 5 AM daily.
+     Type: String
+     Default: 09:10
+  WeeklyMaintenanceTime:
+     Description: Specify the preferred start time to perform weekly maintenance, formatted d:HH:MM in the UTC time zone
+     Default: '7:12:00'
+     Type: String
+  AutomaticBackupRetentionDays:
+     Description: The number of days to retain automatic backups. Setting this property to 0 disables automatic backups. You can retain automatic backups for a maximum of 90 days. The default is 30
+     Type: String
+     Default: 7
+     MinLength: 0
+     MaxLength: 90
+  StorageVirtualMachineName:
+    Type: String
+    Default: ''
+    Description: StorageVirtualMachineName of fsx
+  SvmAdminPassword:
+     NoEcho: true
+     Description: The password to use when managing the SVM using the NetApp ONTAP CLI or REST API. If you do not specify a password, you can still use the file system's vsadmin user to manage the SVM.
+     Type: String
+     MinLength: 5
+     MaxLength: 40
+     AllowedPattern: ^[a-zA-Z0-9]*$
+  NetBiosName:
+    Type: String
+    Default: ''
+    Description: NetBiosName of fsx
+  ADDirectoryName:
+    Type: String
+    Description: Active Directory Name. Eg. my.ad.com
+    Default: ''
+  ADDnsIpAddresses1:
+    Type: String
+    Description: Active Directory DNS 1. Eg. 10.0.0.142
+    Default: ''
+  ADDnsIpAddresses2:
+    Type: String
+    Description: Active Directory DNS 2. Eg. 10.0.0.143
+    Default: ''
+  OrganizationalUnitDistinguishedName:
+    Type: String
+    Description: OU=dev,DC=dev,DC=example,DC=crop
+    Default: ''
+  UserName:
+    Type: String
+    Description: usrer name of AD
+    Default: ''
+  Password:
+    Type: String
+    NoEcho: true
+    Description: Password of AD 
+  AppFsxVolumeName:
+    Description: Name of the fsx volume.
+    Type: String
+    Default: ''
+  AppVolumesize:
+    Default: 250
+    Description: Specify the storage capacity of the file system being created, in gibibytes. Minimum 1024 GiB; Maximum 192 TiB.
+    Type: Number
+  AppVolumeSecurityStyle:
+     Description: The security style of the root volume of the SVM. Specify one of the following values, UNIX, NTFS or MIXED.
+     Type: String
+     Default: UNIX
+     AllowedValues: ["UNIX", "NTFS", "MIXED"]
+  AppJunctionPath:
+     Description: /path
+     Default: /app
+     Type: String
+  AppVolumetype:
+     Description: Specifies the type of volume you are creating Read-Write (RW) , Data Protection (DP)
+     Type: String
+     Default: RW
+     AllowedValues: ["RW","DP"]
+  AppStorageEfficiency:
+     Description: Set to true to enable deduplication, compression, and compaction storage efficiency features on the volume, or set to false to disable them
+     Type: String
+     Default: true
+     AllowedValues: ["true","false"]
+  AppSnapshotPolicy:
+     Description: Specifies the snapshot policy for the volume
+     Type: String
+     Default: none
+     AllowedValues: ["default","default-1weekly","none"]
+  AppTieringPolicyCoolingPeriod:
+     Description: Specifies the number of days that user data in a volume must remain inactive before it is considered "cold" and moved to the capacity pool. Used with the AUTO and SNAPSHOT_ONLY tiering policies. Enter a whole number between 2 and 183. Default values are 31 days for AUTO and 2 days for SNAPSHOT_ONLY.
+     Type: String
+     Default: 7
+     MinLength: 1
+     MaxLength: 183
+  AppTieringPolicyName:
+     Description: Specifies the tiering policy used to transition data. Default value is SNAPSHOT_ONLY
+     Default: NONE
+     Type: String
+     AllowedValues: ["SNAPSHOT_ONLY","ALL","NONE","AUTO"]
+  DataFsxVolumeName:
+    Description: Name of the fsx volume.
+    Type: String
+    Default: ''
+  DataVolumesize:
+    Default: 250
+    Description: Specify the storage capacity of the file system being created, in gibibytes. Minimum 1024 GiB; Maximum 192 TiB.
+    Type: Number
+  DatatVolumeSecurityStyle:
+     Description: The security style of the root volume of the SVM. Specify one of the following values, UNIX, NTFS or MIXED.
+     Type: String
+     Default: UNIX
+     AllowedValues: ["UNIX", "NTFS", "MIXED"]
+  DataJunctionPath:
+     Description: /path
+     Default: /data
+     Type: String
+  DataVolumetype:
+     Description: Specifies the type of volume you are creating Read-Write (RW) , Data Protection (DP)
+     Type: String
+     Default: RW
+     AllowedValues: ["RW","DP"]
+  DataStorageEfficiency:
+     Description: Set to true to enable deduplication, compression, and compaction storage efficiency features on the volume, or set to false to disable them
+     Type: String
+     Default: true
+     AllowedValues: ["true","false"]
+  DataSnapshotPolicy:
+     Description: Specifies the snapshot policy for the volume
+     Type: String
+     Default: none
+     AllowedValues: ["default","default-1weekly","none"]
+  DataTieringPolicyCoolingPeriod:
+     Description: Specifies the number of days that user data in a volume must remain inactive before it is considered "cold" and moved to the capacity pool. Used with the AUTO and SNAPSHOT_ONLY tiering policies. Enter a whole number between 2 and 183. Default values are 31 days for AUTO and 2 days for SNAPSHOT_ONLY.
+     Type: String
+     Default: 7
+     MinLength: 1
+     MaxLength: 183
+  DataTieringPolicyName:
+     Description: Specifies the tiering policy used to transition data. Default value is SNAPSHOT_ONLY
+     Default: NONE
+     Type: String
+     AllowedValues: ["SNAPSHOT_ONLY","ALL","NONE","AUTO"]
+
+  # ScratchFsxVolumeName:
+  #   Description: Name of the fsx volume.
+  #   Type: String
+  #   Default: 
+  # ScratchVolumesize:
+  #   Default: ''
+  #   Description: Specify the storage capacity of the file system being created, in gibibytes. Minimum 1024 GiB; Maximum 192 TiB.
+  #   Type: Number
+  # ScratchtVolumeSecurityStyle:
+  #    Description: The security style of the root volume of the SVM. Specify one of the following values, UNIX, NTFS or MIXED.
+  #    Type: String
+  #    Default: UNIX
+  #    AllowedValues: ["UNIX", "NTFS", "MIXED"]
+  # ScratchJunctionPath:
+  #    Description: /path
+  #    Default: /data
+  #    Type: String
+  # ScratchVolumetype:
+  #    Description: Specifies the type of volume you are creating Read-Write (RW) , Data Protection (DP)
+  #    Type: String
+  #    Default: RW
+  #    AllowedValues: ["RW","DP"]
+  # ScratchStorageEfficiency:
+  #    Description: Set to true to enable deduplication, compression, and compaction storage efficiency features on the volume, or set to false to disable them
+  #    Type: String
+  #    Default: true
+  #    AllowedValues: ["true","false"]
+  # ScratchSnapshotPolicy:
+  #    Description: Specifies the snapshot policy for the volume
+  #    Type: String
+  #    Default: none
+  #    AllowedValues: ["default","default-1weekly","none"]
+  # ScratchTieringPolicyCoolingPeriod:
+  #    Description: Specifies the number of days that user data in a volume must remain inactive before it is considered "cold" and moved to the capacity pool. Used with the AUTO and SNAPSHOT_ONLY tiering policies. Enter a whole number between 2 and 183. Default values are 31 days for AUTO and 2 days for SNAPSHOT_ONLY.
+  #    Type: String
+  #    Default: 7
+  #    MinLength: 1
+  #    MaxLength: 183
+  # ScratchTieringPolicyName:
+  #    Description: Specifies the tiering policy used to transition data. Default value is SNAPSHOT_ONLY
+  #    Default: NONE
+  #    Type: String
+  #    AllowedValues: ["SNAPSHOT_ONLY","ALL","NONE","AUTO"]
+
+  SecretName:
+     Description: Name of the FSx SecretsManager
+     Default: aweuw1nprpc02secretfsx
+     Type: String
+Resources:
+  FSxONTAPSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref myVpc
+      GroupName: !Sub "${FileSystemName}-sg"
+      GroupDescription: Security Group for FSx File Storage Access
+      SecurityGroupIngress:
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 111
+          ToPort: 111
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 135
+          ToPort: 135
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 139
+          ToPort: 139
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 161
+          ToPort: 161
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 162
+          ToPort: 162
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 445
+          ToPort: 445
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 635
+          ToPort: 635
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 749
+          ToPort: 749
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 3260
+          ToPort: 3260
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 4045
+          ToPort: 4045
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 4046
+          ToPort: 4046
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 10000
+          ToPort: 10000
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 11104
+          ToPort: 11104
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 11105
+          ToPort: 11105
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: udp
+          FromPort: 111
+          ToPort: 111
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: udp
+          FromPort: 135
+          ToPort: 135
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: udp
+          FromPort: 137
+          ToPort: 137
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: udp
+          FromPort: 139
+          ToPort: 139
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: udp
+          FromPort: 161
+          ToPort: 161
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: udp
+          FromPort: 162
+          ToPort: 162
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: udp
+          FromPort: 635
+          ToPort: 635
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: udp
+          FromPort: 2049
+          ToPort: 2049
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: udp
+          FromPort: 4045
+          ToPort: 4045
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: udp
+          FromPort: 4046
+          ToPort: 4046
+          CidrIp: !Ref FSxAllowedCIDR
+        - IpProtocol: udp
+          FromPort: 4049
+          ToPort: 4049
+          CidrIp: !Ref FSxAllowedCIDR
+  FSxONTAP:
+    Type: AWS::FSx::FileSystem
+    Properties:
+      FileSystemType: ONTAP
+      StorageCapacity: !Ref StorageCapacity
+      StorageType: SSD
+      SecurityGroupIds: 
+        - !GetAtt FSxONTAPSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref SubnetIds
+      OntapConfiguration:
+        AutomaticBackupRetentionDays: !Ref AutomaticBackupRetentionDays
+        DailyAutomaticBackupStartTime: !Ref DailyAutomaticBackupStartTime
+        DeploymentType: SINGLE_AZ_1
+        DiskIopsConfiguration:
+          Mode: AUTOMATIC
+        PreferredSubnetId: !Ref SubnetIds
+        ThroughputCapacity: !Ref ThroughputCapacity
+        WeeklyMaintenanceStartTime: !Ref WeeklyMaintenanceTime
+        FsxAdminPassword: !Ref FsxAdminPassword
+      Tags:
+        - Key: Name
+          Value: !Ref FileSystemName
+  SVM:        
+    Type: AWS::FSx::StorageVirtualMachine
+    Properties:
+      ActiveDirectoryConfiguration:  
+        NetBiosName: !Ref NetBiosName
+        SelfManagedActiveDirectoryConfiguration: 
+          DnsIps: 
+            - !Ref ADDnsIpAddresses1
+            - !Ref ADDnsIpAddresses2
+          DomainName: !Ref ADDirectoryName
+          OrganizationalUnitDistinguishedName: !Ref OrganizationalUnitDistinguishedName
+          Password: !Ref Password
+          UserName: !Ref UserName
+      FileSystemId: !Ref FSxONTAP
+      Name: !Ref StorageVirtualMachineName
+      RootVolumeSecurityStyle: !Ref RootVolumeSecurityStyle
+      SvmAdminPassword: !Ref SvmAdminPassword
+  FSxVolumedata:
+    Type: 'AWS::FSx::Volume'
+    Properties:
+      Name: !Ref DataFsxVolumeName
+      OntapConfiguration:
+        JunctionPath: !Ref DataJunctionPath
+        SecurityStyle: !Ref DatatVolumeSecurityStyle
+        SizeInMegabytes: !Ref DataVolumesize
+        OntapVolumeType: !Ref DataVolumetype
+        StorageEfficiencyEnabled: !Ref DataStorageEfficiency
+        SnapshotPolicy: !Ref DataSnapshotPolicy
+        StorageVirtualMachineId: !Ref SVM
+        TieringPolicy:
+          CoolingPeriod: !Ref DataTieringPolicyCoolingPeriod
+          Name: !Ref DataTieringPolicyName
+      VolumeType: ONTAP
+  FSxVolumeapp:
+    Type: 'AWS::FSx::Volume'
+    Properties:
+      Name: !Ref AppFsxVolumeName
+      OntapConfiguration:
+        JunctionPath: !Ref AppJunctionPath
+        SecurityStyle: !Ref AppVolumeSecurityStyle
+        SizeInMegabytes: !Ref AppVolumesize
+        OntapVolumeType: !Ref AppVolumetype
+        StorageEfficiencyEnabled: !Ref AppStorageEfficiency
+        SnapshotPolicy: !Ref AppSnapshotPolicy
+        StorageVirtualMachineId: !Ref SVM
+        TieringPolicy:
+          CoolingPeriod: !Ref AppTieringPolicyCoolingPeriod
+          Name: !Ref AppTieringPolicyName
+      VolumeType: ONTAP
+  # FSxVolumescratch:
+  #   Type: 'AWS::FSx::Volume'
+  #   Properties:
+  #     Name: !Ref ScratchFsxVolumeName
+  #     OntapConfiguration:
+  #       JunctionPath: !Ref ScratchJunctionPath
+  #       SecurityStyle: !Ref ScratchVolumeSecurityStyle
+  #       SizeInMegabytes: !Ref ScratchVolumesize
+  #       OntapVolumeType: !Ref ScratchVolumetype
+  #       StorageEfficiencyEnabled: !Ref ScratchStorageEfficiency
+  #       SnapshotPolicy: !Ref ScratchSnapshotPolicy
+  #       StorageVirtualMachineId: !Ref SVM
+  #       TieringPolicy:
+  #         CoolingPeriod: !Ref ScratchTieringPolicyCoolingPeriod
+  #         Name: !Ref ScratchTieringPolicyName
+  #     VolumeType: ONTAP
+  ## Secret Manager
+  SMFsxCredintails:
+    Type: AWS::SecretsManager::Secret
+    Properties: 
+      Description: FSx credintails 
+      Name: !Ref SecretName
+      SecretString: !Sub '{"svmadmin_password":${SvmAdminPassword},"fsxadmin_password":${FsxAdminPassword}}'  
+Outputs:
+  FSxFileSystemID:
+    Description: File System ID for FSx ONTAP
+    Value: !Ref FSxONTAP
+  SMFSxSecretManager:
+    Description: Secret Manager ARN for FSx ONTAP Admin credintails
+    Value: !Ref SMFsxCredintails
