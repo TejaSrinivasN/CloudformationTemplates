@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create an EC2 instance with a security group allowing only RDP (port 3389).
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: The ID of the VPC where the EC2 instance will be deployed.
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: The ID of the subnet where the EC2 instance will be deployed.
+
+  VpcCidr:
+    Type: String
+    Description: The CIDR block of the VPC.
+
+  SecurityGroupName:
+    Type: String
+    Description: The name of the security group to create.
+
+  AmiId:
+    Type: String
+    Description: The ID of the AMI to use for the EC2 instance.
+
+  InstanceType:
+    Type: String
+    Description: The instance type for the EC2 instance.
+
+  InstanceName:
+    Type: String
+    Description: The name of the EC2 instance.
+  
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The name of the key pair to use for the EC2 instance.
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupName: !Ref SecurityGroupName
+      GroupDescription: Security group for RDP access
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: !Ref VpcCidr
+          Description: RDP port
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref SubnetId
+      ImageId: !Ref AmiId
+      KeyName: !Ref KeyPairName
+      SecurityGroupIds:
+        - !GetAtt SecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: !Ref InstanceName
+Outputs:
+  InstanceId:
+    Description: The ID of the created EC2 instance.
+    Value: !Ref EC2Instance
+
+  SecurityGroupId:
+    Description: The ID of the created Security Group.
+    Value: !Ref SecurityGroup
